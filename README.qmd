@@ -1,0 +1,145 @@
+---
+title: "Weibull PH custom response distribution for brms"
+format: gfm
+---
+
+Andrea Discacciati
+
+Karolinska Institutet, Sweden
+
+Published: 2022-10-27
+
+Last updated: Sys.Date()
+
+---
+
+```{r, echo = FALSE}
+library(brms)
+library(rstanarm)
+library(ggplot2)
+
+theme_set(theme_bw())
+```
+
+
+Functions to add to `brms` the Weibull custom response distribution with proportional-hazards 
+parametrisation.
+
+$$f(t; \mu, \gamma) = \mu  \gamma t^{\gamma-1} \exp(-\lambda t^{\gamma})$$.
+
+Functions can be `source`'d directly in R with:
+
+```{r, eval = FALSE}
+source("https://raw.githubusercontent.com/anddis/brms-weibullPH/main/weibullPH_funs.R")
+```
+
+```{r, include = FALSE}
+source("weibullPH_funs.R")
+```
+
+
+### Simulate right-censored survival data.
+
+```{r}
+set.seed(1901)
+N <- 1000
+x <- rep(c(1, 0), each = N/2)
+z <- rnorm(N)
+y <- flexsurv::rweibullPH(N, 
+                          shape =  1.2, # gamma
+                          scale = exp(0 + log(2)*(x == 1) + log(0.75)*z)) # mu
+cens <- runif(N, 0, 4)
+time <- pmin(y, cens)
+status <- as.numeric(y <= cens)
+simdata <- data.frame(
+  time = time,
+  status = status,
+  censored = 1 - status,
+  x = factor(x),
+  z = z
+)
+rm(cens, N, x, status, time, y, z)
+```
+
+### Fit Weibull PH model with `brms`.
+
+```{r}
+formula_brms <- bf(time | cens(censored) ~ x + z,
+           family = weibullPH)
+fit_brms <- brm(formula_brms, 
+                data = simdata,
+                chains = 4,
+                iter = 2000,
+                stanvars = stanvars_weibullPH,
+                prior = c(prior(normal(0, 20), class = Intercept),
+                          prior(normal(0, sqrt(.5)), class = b),
+                          prior(exponential(1), class = gamma)),
+                seed = 1234,
+                backend = "cmdstanr",
+                refresh = 0)
+```
+
+### Summary of the model.
+
+```{r}
+print(fit_brms, digits = 4)
+```
+
+### Expected survival. 
+
+Expected survival by levels of `x`, given `z=0`. 
+
+```{r}
+conditional_effects(fit_brms,
+                    effects = "x",
+                    conditions = data.frame(z = 0))
+```
+
+### Graphical posterior predictive checking.
+
+On the survival scale.
+
+```{r}
+pp_check(fit_brms, 
+         ndraws = 50, 
+         type = "km_overlay", 
+         status_y = simdata$status)
+```
+
+### Compare results versus `rstanarm`.
+
+```{r, include = FALSE, warning = FALSE}
+fit_rstanarm <- stan_surv(Surv(time, status) ~ x + z,
+                  data = simdata,
+                  basehaz = "weibull",
+                  chains = 4,
+                  iter = 2000,
+                  seed = 1234,
+                  prior = normal(0, sqrt(.5)),
+                  prior_aux = exponential(1),
+                  prior_intercept = normal(0, 20),
+                  refresh = 0)
+```
+
+```{r, include = FALSE}
+S <- as.data.frame(fit_rstanarm)
+S$fit = "rstanarm"
+
+B <- as.data.frame(fit_brms)[, 1:4]
+colnames(B) <- colnames(S)[1:4]
+B$fit = "brms"
+
+SB <- rbind(S, B)
+SB |> 
+  tidyr::pivot_longer(cols = -"fit") |> 
+  ggplot(aes(x = value, colour = fit)) +
+  geom_line(stat = "density", lwd = 1.5, alpha = 0.5) + 
+  facet_wrap(~ name, scales= "free") +
+  scale_color_manual(values = unname(palette.colors()[c(6, 2)]))
+```
+
+Session info
+```{r}
+sessionInfo()
+```
+
