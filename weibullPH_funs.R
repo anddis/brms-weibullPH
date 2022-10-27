@@ -38,9 +38,9 @@ posterior_epred_weibullPH <- function(prep) { # expected survival
 }
 
 log_lik_weibullPH <- function(i, prep) { # log-likelihood
-  lambda <- brms::get_dpar(prep, "mu", i = i)
+  mu <- brms::get_dpar(prep, "mu", i = i)
   gamma <- brms::get_dpar(prep, "gamma", i = i)
-  sigma <- lambda^(-1/gamma) # PH -> AFT
+  sigma <- mu^(-1/gamma) # PH -> AFT
   
   args <- list(shape = gamma, scale = sigma)
   out <- brms:::log_lik_censor(
@@ -53,9 +53,9 @@ log_lik_weibullPH <- function(i, prep) { # log-likelihood
 }
 
 posterior_predict_weibullPH <- function(i, prep, ntrys = 5, ...) { # posterior predictive distribution
-  lambda <- brms::get_dpar(prep, "mu", i = i)
+  mu <- brms::get_dpar(prep, "mu", i = i)
   gamma <- brms::get_dpar(prep, "gamma", i = i)
-  sigma <- lambda^(-1/gamma) # PH -> AFT
+  sigma <- mu^(-1/gamma) # PH -> AFT
   
   brms:::rcontinuous(
     n = prep$ndraws, dist = "weibull",

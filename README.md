@@ -7,46 +7,24 @@ Karolinska Institutet, Sweden
 
 Published: 2022-10-27
 
-Last updated: Sys.Date()
+Last updated: 2022-10-27
 
 ------------------------------------------------------------------------
 
-    Loading required package: Rcpp
+``` r
+library(brms)
+library(rstanarm)
+library(ggplot2)
 
-    Loading 'brms' package (version 2.18.0). Useful instructions
-    can be found by typing help('brms'). A more detailed introduction
-    to the package is available through vignette('brms_overview').
-
-
-    Attaching package: 'brms'
-
-    The following object is masked from 'package:stats':
-
-        ar
-
-    This is rstanarm version 2.21.2
-
-    - See https://mc-stan.org/rstanarm/articles/priors for changes to default priors!
-
-    - Default priors may change, so it's safest to specify priors, even if equivalent to the defaults.
-
-    - For execution on a local, multicore CPU with excess RAM we recommend calling
-
-      options(mc.cores = parallel::detectCores())
-
-
-    Attaching package: 'rstanarm'
-
-    The following objects are masked from 'package:brms':
-
-        dirichlet, exponential, get_y, lasso, ngrps
+theme_set(theme_bw())
+```
 
 Functions to add to `brms` the Weibull custom response distribution with
 proportional-hazards parametrisation.
 
-$$f(t; \mu, \gamma) = \mu  \gamma t^{\gamma-1} \exp(-\lambda t^{\gamma})$$.
+$$f(t; \mu, \gamma) = \mu  \gamma t^{\gamma-1} \exp(-\mu t^{\gamma})$$.
 
-Functions can be `source`’d directly in R with:
+Functions can be `source`’d directly from R:
 
 ``` r
 source("https://raw.githubusercontent.com/anddis/brms-weibullPH/main/weibullPH_funs.R")
@@ -99,12 +77,12 @@ fit_brms <- brm(formula_brms,
 
     Chain 1 finished in 2.0 seconds.
     Chain 2 finished in 1.9 seconds.
-    Chain 3 finished in 2.0 seconds.
+    Chain 3 finished in 2.1 seconds.
     Chain 4 finished in 2.1 seconds.
 
     All 4 chains finished successfully.
     Mean chain execution time: 2.0 seconds.
-    Total execution time: 8.5 seconds.
+    Total execution time: 8.4 seconds.
 
 ### Summary of the model.
 
@@ -135,15 +113,38 @@ print(fit_brms, digits = 4)
 
 ### Expected survival.
 
-Expected survival by levels of `x`, given `z=0`.
+Posterior expected survival by levels of `x`, given `z=0`.
 
 ``` r
-conditional_effects(fit_brms,
+es <- conditional_effects(fit_brms,
                     effects = "x",
                     conditions = data.frame(z = 0))
+print(es$x, digits = 4)
+```
+
+      x   time censored z cond__ effect1__ estimate__    se__ lower__ upper__
+    1 0 0.6367    0.186 0      1         0     0.9667 0.04048  0.8933  1.0542
+    2 1 0.6367    0.186 0      1         1     0.5275 0.02008  0.4886  0.5695
+
+``` r
+es
 ```
 
 ![](README_files/figure-commonmark/unnamed-chunk-7-1.png)
+
+True values:
+
+``` r
+1^(-1/1.2) * gamma(1+1/1.2) 
+```
+
+    [1] 0.9406559
+
+``` r
+2^(-1/1.2) * gamma(1+1/1.2)
+```
+
+    [1] 0.5279253
 
 ### Graphical posterior predictive checking.
 
@@ -156,9 +157,26 @@ pp_check(fit_brms,
          status_y = simdata$status)
 ```
 
-![](README_files/figure-commonmark/unnamed-chunk-8-1.png)
+![](README_files/figure-commonmark/unnamed-chunk-9-1.png)
 
-### Compare results versus `rstanarm`.
+### Compare `brms` results with `rstanarm`.
+
+Same Weibull PH parametrisation.
+
+``` r
+fit_rstanarm <- stan_surv(Surv(time, status) ~ x + z,
+                  data = simdata,
+                  basehaz = "weibull",
+                  chains = 4,
+                  iter = 2000,
+                  seed = 1234,
+                  prior = normal(0, sqrt(.5)),
+                  prior_aux = exponential(1),
+                  prior_intercept = normal(0, 20),
+                  refresh = 0)
+```
+
+![](README_files/figure-commonmark/unnamed-chunk-11-1.png)
 
 Session info
 

@@ -9,11 +9,11 @@ Karolinska Institutet, Sweden
 
 Published: 2022-10-27
 
-Last updated: Sys.Date()
+Last updated: `r Sys.Date()`
 
 ---
 
-```{r, echo = FALSE}
+```{r, message = FALSE}
 library(brms)
 library(rstanarm)
 library(ggplot2)
@@ -25,9 +25,9 @@ theme_set(theme_bw())
 Functions to add to `brms` the Weibull custom response distribution with proportional-hazards 
 parametrisation.
 
-$$f(t; \mu, \gamma) = \mu  \gamma t^{\gamma-1} \exp(-\lambda t^{\gamma})$$.
+$$f(t; \mu, \gamma) = \mu  \gamma t^{\gamma-1} \exp(-\mu t^{\gamma})$$.
 
-Functions can be `source`'d directly in R with:
+Functions can be `source`'d directly from R:
 
 ```{r, eval = FALSE}
 source("https://raw.githubusercontent.com/anddis/brms-weibullPH/main/weibullPH_funs.R")
@@ -87,13 +87,23 @@ print(fit_brms, digits = 4)
 
 ### Expected survival. 
 
-Expected survival by levels of `x`, given `z=0`. 
+Posterior expected survival by levels of `x`, given `z=0`. 
 
 ```{r}
-conditional_effects(fit_brms,
+es <- conditional_effects(fit_brms,
                     effects = "x",
                     conditions = data.frame(z = 0))
+print(es$x, digits = 4)
+es
 ```
+
+True values:
+
+```{r}
+1^(-1/1.2) * gamma(1+1/1.2) 
+2^(-1/1.2) * gamma(1+1/1.2)
+```
+
 
 ### Graphical posterior predictive checking.
 
@@ -106,9 +116,11 @@ pp_check(fit_brms,
          status_y = simdata$status)
 ```
 
-### Compare results versus `rstanarm`.
+### Compare `brms` results with `rstanarm`.
 
-```{r, include = FALSE, warning = FALSE}
+Same Weibull PH parametrisation.
+
+```{r, results = "hide", warning = FALSE}
 fit_rstanarm <- stan_surv(Surv(time, status) ~ x + z,
                   data = simdata,
                   basehaz = "weibull",
@@ -121,7 +133,7 @@ fit_rstanarm <- stan_surv(Surv(time, status) ~ x + z,
                   refresh = 0)
 ```
 
-```{r, include = FALSE}
+```{r, echo = FALSE}
 S <- as.data.frame(fit_rstanarm)
 S$fit = "rstanarm"
 
