@@ -7,9 +7,22 @@ Karolinska Institutet, Sweden
 
 Published: 2022-10-27
 
-Last updated: 2022-10-27
+Last updated: 2022-10-28
 
 ------------------------------------------------------------------------
+
+Functions to add to `brms` the **Weibull** custom response distribution
+with **proportional-hazards** parametrisation.
+
+$$f(t; \\mu, \\gamma) = \\mu \\gamma t^{\\gamma-1} \\exp(-\\mu t^{\\gamma})$$,
+
+where $\\log(\\mu_i) = x_i^T\\beta$.
+
+Functions can be `source`’d directly from R:
+
+``` r
+source("https://raw.githubusercontent.com/anddis/brms-weibullPH/main/weibullPH_funs.R")
+```
 
 ``` r
 library(brms)
@@ -19,27 +32,16 @@ library(ggplot2)
 theme_set(theme_bw())
 ```
 
-Functions to add to `brms` the Weibull custom response distribution with
-proportional-hazards parametrisation.
-
-$$f(t; \mu, \gamma) = \mu  \gamma t^{\gamma-1} \exp(-\mu t^{\gamma})$$.
-
-Functions can be `source`’d directly from R:
-
-``` r
-source("https://raw.githubusercontent.com/anddis/brms-weibullPH/main/weibullPH_funs.R")
-```
-
 ### Simulate right-censored survival data.
 
 ``` r
 set.seed(1901)
 N <- 1000
-x <- rep(c(1, 0), each = N/2)
+x <- rbinom(N, 1, 0.5)
 z <- rnorm(N)
 y <- flexsurv::rweibullPH(N, 
                           shape =  1.2, # gamma
-                          scale = exp(0 + log(2)*(x == 1) + log(0.75)*z)) # mu
+                          scale = exp(0 + log(2)*x + log(0.75)*z)) # mu
 cens <- runif(N, 0, 4)
 time <- pmin(y, cens)
 status <- as.numeric(y <= cens)
@@ -76,15 +78,15 @@ fit_brms <- brm(formula_brms,
     Running MCMC with 4 sequential chains...
 
     Chain 1 finished in 2.0 seconds.
-    Chain 2 finished in 1.9 seconds.
-    Chain 3 finished in 2.1 seconds.
-    Chain 4 finished in 2.1 seconds.
+    Chain 2 finished in 1.7 seconds.
+    Chain 3 finished in 2.0 seconds.
+    Chain 4 finished in 2.0 seconds.
 
     All 4 chains finished successfully.
-    Mean chain execution time: 2.0 seconds.
-    Total execution time: 8.4 seconds.
+    Mean chain execution time: 1.9 seconds.
+    Total execution time: 8.0 seconds.
 
-### Summary of the model.
+### Model summary.
 
 ``` r
 print(fit_brms, digits = 4)
@@ -99,13 +101,13 @@ print(fit_brms, digits = 4)
 
     Population-Level Effects: 
               Estimate Est.Error l-95% CI u-95% CI   Rhat Bulk_ESS Tail_ESS
-    Intercept  -0.0403    0.0513  -0.1427   0.0567 1.0011     4193     2961
-    x1          0.7416    0.0709   0.5983   0.8783 1.0012     4350     3402
-    z          -0.3119    0.0362  -0.3828  -0.2418 1.0020     3933     3087
+    Intercept  -0.0296    0.0522  -0.1341   0.0720 1.0007     3840     2752
+    x1          0.7000    0.0733   0.5526   0.8408 1.0010     3870     3130
+    z          -0.2579    0.0357  -0.3296  -0.1896 1.0007     4351     2876
 
     Family Specific Parameters: 
           Estimate Est.Error l-95% CI u-95% CI   Rhat Bulk_ESS Tail_ESS
-    gamma   1.2214    0.0335   1.1577   1.2877 1.0020     3969     3153
+    gamma   1.1958    0.0339   1.1284   1.2638 1.0009     4489     3178
 
     Draws were sampled using sample(hmc). For each parameter, Bulk_ESS
     and Tail_ESS are effective sample size measures, and Rhat is the potential
@@ -123,8 +125,8 @@ print(es$x, digits = 4)
 ```
 
       x   time censored z cond__ effect1__ estimate__    se__ lower__ upper__
-    1 0 0.6367    0.186 0      1         0     0.9667 0.04048  0.8933  1.0542
-    2 1 0.6367    0.186 0      1         1     0.5275 0.02008  0.4886  0.5695
+    1 0 0.6082     0.22 0      1         0     0.9649 0.04150  0.8879  1.0501
+    2 1 0.6082     0.22 0      1         1     0.5374 0.02228  0.4962  0.5834
 
 ``` r
 es
@@ -135,20 +137,14 @@ es
 True values:
 
 ``` r
-1^(-1/1.2) * gamma(1+1/1.2) 
+c(1^(-1/1.2) * gamma(1+1/1.2), 2^(-1/1.2) * gamma(1+1/1.2))
 ```
 
-    [1] 0.9406559
-
-``` r
-2^(-1/1.2) * gamma(1+1/1.2)
-```
-
-    [1] 0.5279253
+    [1] 0.9406559 0.5279253
 
 ### Graphical posterior predictive checking.
 
-On the survival scale.
+Survival scale.
 
 ``` r
 pp_check(fit_brms, 
@@ -159,9 +155,9 @@ pp_check(fit_brms,
 
 ![](README_files/figure-commonmark/unnamed-chunk-9-1.png)
 
-### Compare `brms` results with `rstanarm`.
+### Compare results from `brms` and `rstanarm`.
 
-Same Weibull PH parametrisation.
+Both use Weibull PH parametrisation.
 
 ``` r
 fit_rstanarm <- stan_surv(Surv(time, status) ~ x + z,
@@ -176,9 +172,11 @@ fit_rstanarm <- stan_surv(Surv(time, status) ~ x + z,
                   refresh = 0)
 ```
 
+Posterior distributions.
+
 ![](README_files/figure-commonmark/unnamed-chunk-11-1.png)
 
-Session info
+### Session info
 
 ``` r
 sessionInfo()

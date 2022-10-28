@@ -11,21 +11,13 @@ Published: 2022-10-27
 
 Last updated: `r Sys.Date()`
 
----
+------------------------------------------------------------------------
 
-```{r, message = FALSE}
-library(brms)
-library(rstanarm)
-library(ggplot2)
+Functions to add to `brms` the **Weibull** custom response distribution with **proportional-hazards** parametrisation.
 
-theme_set(theme_bw())
-```
+$$f(t; \\mu, \\gamma) = \\mu \\gamma t^{\\gamma-1} \\exp(-\\mu t^{\\gamma})$$,
 
-
-Functions to add to `brms` the Weibull custom response distribution with proportional-hazards 
-parametrisation.
-
-$$f(t; \mu, \gamma) = \mu  \gamma t^{\gamma-1} \exp(-\mu t^{\gamma})$$.
+where $\\log(\\mu_i) = x_i^T\\beta$.
 
 Functions can be `source`'d directly from R:
 
@@ -37,17 +29,24 @@ source("https://raw.githubusercontent.com/anddis/brms-weibullPH/main/weibullPH_f
 source("weibullPH_funs.R")
 ```
 
+```{r, message = FALSE}
+library(brms)
+library(rstanarm)
+library(ggplot2)
+
+theme_set(theme_bw())
+```
 
 ### Simulate right-censored survival data.
 
 ```{r}
 set.seed(1901)
 N <- 1000
-x <- rep(c(1, 0), each = N/2)
+x <- rbinom(N, 1, 0.5)
 z <- rnorm(N)
 y <- flexsurv::rweibullPH(N, 
                           shape =  1.2, # gamma
-                          scale = exp(0 + log(2)*(x == 1) + log(0.75)*z)) # mu
+                          scale = exp(0 + log(2)*x + log(0.75)*z)) # mu
 cens <- runif(N, 0, 4)
 time <- pmin(y, cens)
 status <- as.numeric(y <= cens)
@@ -79,15 +78,15 @@ fit_brms <- brm(formula_brms,
                 refresh = 0)
 ```
 
-### Summary of the model.
+### Model summary.
 
 ```{r}
 print(fit_brms, digits = 4)
 ```
 
-### Expected survival. 
+### Expected survival.
 
-Posterior expected survival by levels of `x`, given `z=0`. 
+Posterior expected survival by levels of `x`, given `z=0`.
 
 ```{r}
 es <- conditional_effects(fit_brms,
@@ -100,14 +99,12 @@ es
 True values:
 
 ```{r}
-1^(-1/1.2) * gamma(1+1/1.2) 
-2^(-1/1.2) * gamma(1+1/1.2)
+c(1^(-1/1.2) * gamma(1+1/1.2), 2^(-1/1.2) * gamma(1+1/1.2))
 ```
-
 
 ### Graphical posterior predictive checking.
 
-On the survival scale.
+Survival scale.
 
 ```{r}
 pp_check(fit_brms, 
@@ -116,9 +113,9 @@ pp_check(fit_brms,
          status_y = simdata$status)
 ```
 
-### Compare `brms` results with `rstanarm`.
+### Compare results from `brms` and `rstanarm`.
 
-Same Weibull PH parametrisation.
+Both use Weibull PH parametrisation.
 
 ```{r, results = "hide", warning = FALSE}
 fit_rstanarm <- stan_surv(Surv(time, status) ~ x + z,
@@ -133,6 +130,8 @@ fit_rstanarm <- stan_surv(Surv(time, status) ~ x + z,
                   refresh = 0)
 ```
 
+Posterior distributions.
+
 ```{r, echo = FALSE}
 S <- as.data.frame(fit_rstanarm)
 S$fit = "rstanarm"
@@ -145,13 +144,13 @@ SB <- rbind(S, B)
 SB |> 
   tidyr::pivot_longer(cols = -"fit") |> 
   ggplot(aes(x = value, colour = fit)) +
-  geom_line(stat = "density", lwd = 1.5, alpha = 0.5) + 
-  facet_wrap(~ name, scales= "free") +
+  geom_line(stat = "density", lwd = 1.5, alpha = 0.6) + 
+  facet_wrap(~ name, scales = "free") +
   scale_color_manual(values = unname(palette.colors()[c(6, 2)]))
 ```
 
-Session info
+### Session info
+
 ```{r}
 sessionInfo()
 ```
-
