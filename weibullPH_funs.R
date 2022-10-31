@@ -4,8 +4,8 @@
 
 weibullPH <- brms::custom_family(
   "weibullPH",
-  dpars = c("mu", "gamma"), # log(mu) = xb
-  links = c("log", "identity"), # identity link for gamma as in rstanarm
+  dpars = c("mu", "gamma"),
+  links = c("log", "log"),  
   lb = c(0, 0),
   ub = c(NA, NA),
   type = "real"

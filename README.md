@@ -7,16 +7,22 @@ Karolinska Institutet, Sweden
 
 Published: 2022-10-27
 
-Last updated: 2022-10-28
+Last updated: 2022-10-31
 
 ------------------------------------------------------------------------
 
 Functions to add to `brms` the **Weibull** custom response distribution
 with **proportional-hazards** parametrisation.
 
-$$f(t; \\mu, \\gamma) = \\mu \\gamma t^{\\gamma-1} \\exp(-\\mu t^{\\gamma})$$,
+$$
+f(t; \mu, \gamma) = \mu \gamma t^{\gamma-1} \exp(-\mu t^{\gamma})
+$$
 
-where $\\log(\\mu_i) = x_i^T\\beta$.
+$$
+h(t; \mu, \gamma) = \mu \gamma t^{\gamma-1}
+$$
+
+where $\mu$ is the scale parameter and $\gamma$ is the shape parameter.
 
 Functions can be `source`’d directly from R:
 
@@ -78,13 +84,13 @@ fit_brms <- brm(formula_brms,
     Running MCMC with 4 sequential chains...
 
     Chain 1 finished in 2.0 seconds.
-    Chain 2 finished in 1.7 seconds.
-    Chain 3 finished in 2.0 seconds.
-    Chain 4 finished in 2.0 seconds.
+    Chain 2 finished in 1.9 seconds.
+    Chain 3 finished in 2.2 seconds.
+    Chain 4 finished in 2.1 seconds.
 
     All 4 chains finished successfully.
-    Mean chain execution time: 1.9 seconds.
-    Total execution time: 8.0 seconds.
+    Mean chain execution time: 2.0 seconds.
+    Total execution time: 8.6 seconds.
 
 ### Model summary.
 

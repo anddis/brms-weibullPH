@@ -15,9 +15,15 @@ Last updated: `r Sys.Date()`
 
 Functions to add to `brms` the **Weibull** custom response distribution with **proportional-hazards** parametrisation.
 
-$$f(t; \\mu, \\gamma) = \\mu \\gamma t^{\\gamma-1} \\exp(-\\mu t^{\\gamma})$$,
+$$
+f(t; \mu, \gamma) = \mu \gamma t^{\gamma-1} \exp(-\mu t^{\gamma})
+$$
 
-where $\\log(\\mu_i) = x_i^T\\beta$.
+$$
+h(t; \mu, \gamma) = \mu \gamma t^{\gamma-1}
+$$
+
+where $\mu$ is the scale parameter and $\gamma$ is the shape parameter.
 
 Functions can be `source`'d directly from R:
 
