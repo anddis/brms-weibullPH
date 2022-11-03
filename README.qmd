@@ -1,6 +1,9 @@
 ---
 title: "Weibull PH custom response distribution for brms"
-format: gfm
+format: 
+  gfm:
+    fig-width: 8
+    fig-height: 7
 ---
 
 Andrea Discacciati
@@ -38,7 +41,9 @@ source("weibullPH_funs.R")
 ```{r, message = FALSE}
 library(brms)
 library(rstanarm)
-library(ggplot2)
+library(survival)
+library(tidybayes)
+library(tidyverse)
 
 theme_set(theme_bw())
 ```
@@ -46,24 +51,25 @@ theme_set(theme_bw())
 ### Simulate right-censored survival data.
 
 ```{r}
-set.seed(1901)
-N <- 1000
-x <- rbinom(N, 1, 0.5)
-z <- rnorm(N)
-y <- flexsurv::rweibullPH(N, 
-                          shape =  1.2, # gamma
-                          scale = exp(0 + log(2)*x + log(0.75)*z)) # mu
-cens <- runif(N, 0, 4)
-time <- pmin(y, cens)
-status <- as.numeric(y <= cens)
-simdata <- data.frame(
-  time = time,
-  status = status,
-  censored = 1 - status,
-  x = factor(x),
-  z = z
-)
-rm(cens, N, x, status, time, y, z)
+simdata <- local({
+  set.seed(1901)
+  N <- 1000
+  x <- rbinom(N, 1, 0.5)
+  z <- rnorm(N)
+  y <- flexsurv::rweibullPH(N, 
+                            shape =  1.2, # gamma
+                            scale = exp(0 + log(2)*x + log(0.75)*z)) # mu
+  cens <- runif(N, 0, 4)
+  time <- pmin(y, cens)
+  status <- as.numeric(y <= cens)
+  data.frame(
+    time = time,
+    status = status,
+    censored = 1 - status,
+    x = factor(x),
+    z = z
+  )
+})
 ```
 
 ### Fit Weibull PH model with `brms`.
@@ -155,7 +161,207 @@ SB |>
   scale_color_manual(values = unname(palette.colors()[c(6, 2)]))
 ```
 
-### Session info
+### Simulate right-censored survival data with shared frailty.
+
+Weibull with normally-distributed random effect (random intercept). 
+Equivalent to Weibull with log-normal shared frailty. 
+Weibull PH parametrisation.
+
+100 clusters. 20 individuals per cluster.
+
+```{r, include = FALSE}
+# utils
+weibullPH_S <- function(t, linpred, gamma) {
+  exp(-exp(linpred) * t^gamma)
+}
+
+weibullPH_h <- function(t, linpred, gamma) {
+  exp(linpred) * gamma * t^gamma
+}
+
+coef.parfm <- function(object) {
+  object[, "ESTIMATE"]
+}
+
+Sbar_fn <- Vectorize(function(time, beta, gamma, sigma2, x) integrate(
+  f = function(alpha, time, beta, gamma, sigma2, x) weibullPH_S(time, sum(x * beta), gamma)^exp(alpha) * stats::dnorm(alpha, mean = 0, sd = sqrt(sigma2)),
+  lower = -Inf,
+  upper = Inf,
+  time = time,
+  beta = beta,
+  gamma = gamma,
+  sigma2 = sigma2,
+  x = x
+)[["value"]], "time")
+```
+
+```{r}
+simdata_me <- local({
+  set.seed(19731)
+  N_clusters <- 100
+  N_individuals <- 20
+  id <- seq(N_clusters * N_individuals)
+  cluster_id <- rep(1:N_clusters, each = N_individuals)
+  x <- rbinom(N_clusters * N_individuals, 1, 0.5)
+  z <- sort(rep(rnorm(N_clusters, 0, sqrt(1.3)), each = N_individuals))
+  y <- flexsurv::rweibullPH(N_clusters * N_individuals, 
+                            shape =  1.2, # gamma
+                            scale = exp(1 + log(2)*x + z)) # mu
+  cens <- runif(N_clusters * N_individuals, 0, 4)
+  time <- pmin(y, cens)
+  status <- as.numeric(y <= cens)
+  data.frame(
+    id = id,
+    cluster_id = cluster_id,
+    time = time,
+    status = status,
+    censored = 1 - status,
+    x = factor(x),
+    z = z
+  )
+})
+```
+
+### Fit mixed-effect Weibull PH model with `brms`.
+
+Random-intercept Weibull PH model.
+
+$$
+h_{ij}(t) = \exp(\beta_0 + \beta_1 x_{ij} + \alpha_{i}) \gamma t^{\gamma-1}, \alpha_i \sim N(0, \sigma^2)
+$$
+
+```{r}
+formula_brms_me <- bf(time | cens(censored) ~ x + (1 | cluster_id),
+                   family = weibullPH)
+fit_brms_me <- brm(formula_brms_me, 
+                data = simdata_me,
+                chains = 4,
+                iter = 4000,
+                stanvars = stanvars_weibullPH,
+                prior = c(
+                  prior(normal(0, 20), class = Intercept),
+                  prior(normal(0, sqrt(.5)), class = b),
+                  prior(exponential(1), class = gamma)
+                  # leave default student-t prior on random effect
+                ),
+                seed = 2345,
+                backend = "cmdstanr",
+                refresh = 0,
+                cores = 4)
+```
+
+### Model summary.
+```{r}
+print(fit_brms_me, digits = 4)
+```
+
+### Survival and hazard functions conditional on random effect.
+
+Plot conditional survival and hazard functions for 20 clusters, sorted by (true) frailty.
+
+
+```{r, echo = FALSE}
+post_stuff <- expand.grid(x = factor(0:1), 
+                          cluster_id = seq(1, max(simdata_me$cluster_id), by = 5)) |> 
+  add_linpred_draws(fit_brms_me,
+                    dpar = "gamma", 
+                    ndraws = 1000, 
+                    seed = 2345,
+                    re_formula = NULL) |> 
+  expand(nesting(.draw, .linpred, gamma),
+    timegrid = seq(0, 4, by = 0.1)) |> 
+  mutate(S = weibullPH_S(timegrid, .linpred, gamma),
+         h = weibullPH_h(timegrid, .linpred, gamma)) |> 
+  left_join(simdata_me[!duplicated(simdata_me$cluster_id), c("cluster_id", "z")], by = "cluster_id") |> 
+  ungroup()
+
+mylabels <- as.character(paste0("C", seq(max(simdata_me$cluster_id)), ": z=", 
+                                sprintf("%3.2f", simdata_me[!duplicated(simdata_me$cluster_id), "z"])))
+names(mylabels) <- seq(max(simdata_me$cluster_id))
+
+ggplot(post_stuff, aes(x = timegrid, y = S, color = x)) +
+  stat_lineribbon(.width = c(0.5, 0.9), lwd = 0.5, alpha = 0.75) +
+  facet_wrap(. ~ fct_reorder(factor(cluster_id), z, min),
+             labeller = as_labeller(mylabels)) + 
+  scale_color_manual(values = unname(palette.colors()[c(6, 2)])) +
+  scale_fill_brewer(palette = "Greys") +
+  labs(x = "Time", y = "Survival probability", title = "Survival functions conditional on random effect")
+```
+
+Note that hazards are proportional conditional on the random effect.
+
+```{r, echo = FALSE}
+ggplot(filter(post_stuff, h>0), aes(x = timegrid, y = log(h), color = x)) +
+  stat_lineribbon(.width = c(0.5, 0.9), lwd = 0.5, alpha = 0.75) +
+  facet_wrap(. ~ fct_reorder(factor(cluster_id), z, min),
+             labeller = as_labeller(mylabels)) + 
+  scale_color_manual(values = unname(palette.colors()[c(6, 2)])) +
+  scale_fill_brewer(palette = "Greys") +
+  labs(x = "Time", y = "log-hazard", title = "Hazard functions conditional on random effect")
+```
+
+### Compare results from `brms` and `parfm`.
+
+```{r}
+fit_parfm <- parfm::parfm(
+  Surv(time, status) ~ x,
+  cluster = "cluster_id",
+  data = simdata_me,
+  dist = "weibull",
+  frailty = "lognormal"
+)
+
+print(fit_parfm)
+```
+
+### Survival functions marginalised over random effect.
+
+Compare `brms` results with `parfm` (black dashed lines) and true curves (black dotted lines)
+
+```{r, include = FALSE}
+Sbar_true <- data.frame(
+  x = factor(rep(c(0, 1), each = 81)),
+  timegrid = rep(seq(0, 4, by = 0.05), 2),
+  Sbar_true = c(Sbar_fn(seq(0, 4, by = 0.05), c(1, log(2)), 1.2, 1.3, c(1, 0)), 
+                Sbar_fn(seq(0, 4, by = 0.05), c(1, log(2)), 1.2, 1.3, c(1, 1)))
+)
+
+Sbar_parfm <- data.frame(
+  x = factor(rep(c(0, 1), each = 81)),
+  timegrid = rep(seq(0, 4, by = 0.05), 2),
+  Sbar_parfm = c(Sbar_fn(seq(0, 4, by = 0.05), c(log(coef(fit_parfm)[["lambda"]]), coef(fit_parfm)[["x1"]]), coef(fit_parfm)[["rho"]], coef(fit_parfm)[["sigma2"]], c(1, 0)), 
+                Sbar_fn(seq(0, 4, by = 0.05), c(log(coef(fit_parfm)[["lambda"]]), coef(fit_parfm)[["x1"]]), coef(fit_parfm)[["rho"]], coef(fit_parfm)[["sigma2"]], c(1, 1)))
+)
+```
+
+```{r, echo = FALSE}
+post_stuff_m <- expand.grid(cluster_id = seq(max(simdata_me$cluster_id)),
+                            x = factor(0:1)) |> 
+  add_linpred_draws(fit_brms_me,
+                    dpar = "gamma", 
+                    ndraws = 1000, 
+                    seed = 2345,
+                    re_formula = NULL) |> 
+  expand(nesting(.draw, .linpred, gamma),
+         timegrid = seq(0, 4, by = 0.05)) |> 
+  mutate(S = weibullPH_S(timegrid, .linpred, gamma)) |> 
+  ungroup() |> 
+  group_by(x, timegrid, .draw) |> 
+  summarise(Sbar = mean(S), .groups = "drop") |> 
+  ungroup()
+
+ggplot(post_stuff_m, aes(x = timegrid, y = Sbar, color = x)) +
+  stat_lineribbon(.width = c(0.8, 0.99), lwd = 0.5, alpha = 0.75) +
+  geom_line(data = Sbar_parfm, aes(x = timegrid, y = Sbar_parfm, group = x), linetype = 2, col = "black") +
+  geom_line(data = Sbar_true, aes(x = timegrid, y = Sbar_true, group = x), linetype = 3, col = "black") +
+  scale_color_manual(values = unname(palette.colors()[c(6, 2)])) +
+  scale_fill_brewer(palette = "Greys") +
+  labs(x = "Time", y = "Survival probability", title = "Survival functions marginalised over random effect")
+```
+
+
+
+### Session info.
 
 ```{r}
 sessionInfo()
