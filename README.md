@@ -7,7 +7,7 @@ Karolinska Institutet, Sweden
 
 Published: 2022-10-27
 
-Last updated: 2022-11-03
+Last updated: 2022-11-04
 
 ------------------------------------------------------------------------
 
@@ -92,8 +92,8 @@ fit_brms <- brm(formula_brms,
     Chain 4 finished in 2.0 seconds.
 
     All 4 chains finished successfully.
-    Mean chain execution time: 2.0 seconds.
-    Total execution time: 8.3 seconds.
+    Mean chain execution time: 1.9 seconds.
+    Total execution time: 8.2 seconds.
 
 ### Model summary.
 
@@ -252,14 +252,14 @@ fit_brms_me <- brm(formula_brms_me,
 
     Running MCMC with 4 parallel chains...
 
-    Chain 1 finished in 34.9 seconds.
-    Chain 2 finished in 35.1 seconds.
-    Chain 3 finished in 40.8 seconds.
-    Chain 4 finished in 41.2 seconds.
+    Chain 1 finished in 32.6 seconds.
+    Chain 2 finished in 32.7 seconds.
+    Chain 3 finished in 38.1 seconds.
+    Chain 4 finished in 38.5 seconds.
 
     All 4 chains finished successfully.
-    Mean chain execution time: 38.0 seconds.
-    Total execution time: 41.3 seconds.
+    Mean chain execution time: 35.5 seconds.
+    Total execution time: 38.5 seconds.
 
 ### Model summary.
 
@@ -299,7 +299,7 @@ by (true) frailty.
 
 ![](README_files/figure-commonmark/unnamed-chunk-16-1.png)
 
-Note that hazards are proportional conditional on the random effect.
+Hazards are proportional conditional on the random effect.
 
 ![](README_files/figure-commonmark/unnamed-chunk-17-1.png)
 
@@ -332,12 +332,16 @@ print(fit_parfm)
 
     Kendall's Tau: 0.347 
 
-### Survival functions marginalised over random effect.
+### Survival and hazard functions marginalised over random effect.
 
 Compare `brms` results with `parfm` (black dashed lines) and true curves
 (black dotted lines)
 
 ![](README_files/figure-commonmark/unnamed-chunk-20-1.png)
+
+Hazards are not proportional when marginalised over the random effect.
+
+![](README_files/figure-commonmark/unnamed-chunk-21-1.png)
 
 ### Session info.
 

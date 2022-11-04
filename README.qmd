@@ -288,7 +288,7 @@ ggplot(post_stuff, aes(x = timegrid, y = S, color = x)) +
   labs(x = "Time", y = "Survival probability", title = "Survival functions conditional on random effect")
 ```
 
-Note that hazards are proportional conditional on the random effect.
+Hazards are proportional conditional on the random effect.
 
 ```{r, echo = FALSE}
 ggplot(filter(post_stuff, h>0), aes(x = timegrid, y = log(h), color = x)) +
@@ -314,7 +314,7 @@ fit_parfm <- parfm::parfm(
 print(fit_parfm)
 ```
 
-### Survival functions marginalised over random effect.
+### Survival and hazard functions marginalised over random effect.
 
 Compare `brms` results with `parfm` (black dashed lines) and true curves (black dotted lines)
 
@@ -348,7 +348,12 @@ post_stuff_m <- expand.grid(cluster_id = seq(max(simdata_me$cluster_id)),
   ungroup() |> 
   group_by(x, timegrid, .draw) |> 
   summarise(Sbar = mean(S), .groups = "drop") |> 
-  ungroup()
+  ungroup() |> 
+  nest_by(x, .draw) |> 
+  mutate(Sbar_splinefun_fn = list(stats::splinefun(data[["timegrid"]], -log(data[["Sbar"]]))),
+         hbar = list(numDeriv::grad(Sbar_splinefun_fn, seq(0, 4, by = 0.05)))) |> 
+  select(-Sbar_splinefun_fn) |> 
+  unnest(cols = c(data, hbar))
 
 ggplot(post_stuff_m, aes(x = timegrid, y = Sbar, color = x)) +
   stat_lineribbon(.width = c(0.8, 0.99), lwd = 0.5, alpha = 0.75) +
@@ -359,6 +364,15 @@ ggplot(post_stuff_m, aes(x = timegrid, y = Sbar, color = x)) +
   labs(x = "Time", y = "Survival probability", title = "Survival functions marginalised over random effect")
 ```
 
+Hazards are not proportional when marginalised over the random effect.
+
+```{r, echo = FALSE}
+ggplot(post_stuff_m, aes(x = timegrid, y = log(hbar), color = x)) +
+  stat_lineribbon(.width = c(0.8, 0.99), lwd = 0.5, alpha = 0.75) +
+  scale_color_manual(values = unname(palette.colors()[c(6, 2)])) +
+  scale_fill_brewer(palette = "Greys") +
+  labs(x = "Time", y = "log-hazard", title = "Hazard functions marginalised over random effect")
+```
 
 
 ### Session info.
